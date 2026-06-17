@@ -23,15 +23,6 @@ implementation, and not a force/contact dynamics model.
 │   ├── lam_schwartz_2008_anova_reference_long.csv
 │   ├── lam_schwartz_2008_joint_rotation_reference_long.csv
 │   └── lam_van_hamme_2015_regression_coefficients.csv
-├── articles/
-│   ├── 1-s2.0-S0021929008001450-main.pdf
-│   ├── 1-s2.0-S0021929008001450-mmc1.xls
-│   ├── 1-s2.0-S0268003315001084-main.pdf
-│   └── 1-s2.0-S0268003315001084-mmc1.doc
-├── d2w_transform_model/
-│   ├── README_D2W_TRAJECTORY_TRANSFORM.md
-│   ├── reference_angles/
-│   └── source_snapshot/
 ├── outputs/
 │   └── .gitkeep
 ├── PACKAGE_MANIFEST.csv
@@ -171,6 +162,10 @@ body skeleton.
 
 ## Source Models And Local Tables
 
+The repository distributes only the local CSV model tables consumed by the
+generator. Original article PDFs and supplementary files are not included.
+Users should obtain the cited source documents from the publishers when needed.
+
 ### Schwartz et al. 2008
 
 Schwartz et al. 2008 provides the speed-binned typically developing pediatric
@@ -181,17 +176,15 @@ reference used here for:
 - dimensionless cadence;
 - dimensionless speed bins.
 
-Local files:
+Local model tables:
 
 ```text
-articles/1-s2.0-S0021929008001450-main.pdf
-articles/1-s2.0-S0021929008001450-mmc1.xls
 models/lam_schwartz_2008_joint_rotation_reference_long.csv
 models/lam_schwartz_2008_anova_reference_long.csv
 ```
 
-The angular model table was extracted from the Excel supplement sheet
-`Joint Rotations`. It includes:
+The angular model table was derived from the Schwartz supplementary joint
+rotation data. It includes:
 
 ```text
 trunk_tilt
@@ -233,8 +226,6 @@ coefficients in:
 
 ```text
 models/lam_van_hamme_2015_regression_coefficients.csv
-articles/1-s2.0-S0268003315001084-main.pdf
-articles/1-s2.0-S0268003315001084-mmc1.doc
 ```
 
 The implemented regression form is:
@@ -251,20 +242,14 @@ where `v*` is dimensionless walking speed.
 These values are exported as discrete reference parameters. They do not
 currently warp or rescale the Schwartz full-cycle angular waveforms.
 
-### D2W Transform Reference
+### D2W-Compatible Transform Convention
 
-The D2W transform files document the coordinate and rotation convention used to
-construct robot-compatible spatial trajectories:
-
-```text
-d2w_transform_model/README_D2W_TRAJECTORY_TRANSFORM.md
-d2w_transform_model/reference_angles/
-d2w_transform_model/source_snapshot/
-```
-
-The Python generator does not read the original D2W text angle files at
-runtime. They are kept for traceability of the transform convention and source
-snapshot.
+The former D2W reference snapshot is not required at runtime and is not
+distributed in this public repository. The relevant transform assumptions are
+implemented directly in `generate_integrated_normative_gait.py`: height-scaled
+segment vectors, the `R = Rz * Ry * Rx` rotation convention, pelvis-fixed
+treadmill projection, D2W Cartesian sign remapping, and the separate ankle-only
+command export.
 
 ## Angular Waveform Construction
 
