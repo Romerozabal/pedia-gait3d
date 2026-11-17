@@ -1,0 +1,21 @@
+{
+  "patient_id": "subject_comfortable",
+  "age_y": 9.0,
+  "height_m": 1.25,
+  "speed_m_s": 1.1,
+  "leg_length_m": null,
+  "n_points": 100,
+  "schwartz_speed_interpolation": "linear",
+  "out_dir": "outputs/subject_comfortable",
+  "contact_model": {
+    "enabled": true,
+    "pattern": "heel_strike",
+    "stance_start_percent": 0.0,
+    "toe_off_percent": 60.0,
+    "heel_to_flat_percent": 12.0,
+    "forefoot_loading_percent": 45.0,
+    "min_swing_clearance_m": 0.025
+  },
+  "export_world_spatial": true,
+  "export_d2w_centered": true
+}
