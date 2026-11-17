@@ -3,124 +3,121 @@
 Normative pediatric gait trajectory reconstruction from subject parameters,
 published reference models, and a D2W-compatible kinematic transform.
 
-This repository contains a standalone Python workflow that estimates
-spatiotemporal reference values, discrete angular reference parameters,
-speed-matched angular waveforms, and approximate 3D spatial gait trajectories
-from a small subject configuration file.
+Give it a child's **age, height and walking speed**. It returns the reference
+joint angles for that speed and an approximate **3D trajectory of the lower
+limbs** over one gait cycle, as CSV tables, figures and an animation.
+
+![One gait cycle: speed-matched joint angles, 3D skeleton and ankle trajectory](docs/media/pipeline_overview.gif)
+
+*One gait cycle for a 9-year-old, 1.25 m tall, walking at 1.10 m/s. Left:
+reference joint angles for that speed. Centre: both limbs reconstructed in 3D.
+Right: the ankle trajectory exported for a gait robot.*
 
 The package is intended as a reproducible reference generator. It is not a
 validated clinical inverse-kinematics pipeline, not a BTS/Helen-Hayes
 implementation, and not a force/contact dynamics model.
 
-## Repository Contents
+## What it proposes
 
-```text
-.
-├── generate_integrated_normative_gait.py
-├── configs/
-│   └── subject_gait_config.example.json
-├── models/
-│   ├── lam_schwartz_2008_anova_reference_long.csv
-│   ├── lam_schwartz_2008_joint_rotation_reference_long.csv
-│   └── lam_van_hamme_2015_regression_coefficients.csv
-├── outputs/
-│   └── .gitkeep
-├── PACKAGE_MANIFEST.csv
-└── requirements.txt
+Gait robots and gait studies need a reference of how a typically developing
+child of a given size walks at a given speed. Published normative data answer
+this for joint *angles*, in a handful of speed categories. PediaGait3D closes
+the gap between those tables and a usable 3D trajectory:
+
+1. **Speed-matched angles.** Walking speed is made dimensionless with leg
+   length and used to interpolate the full-cycle angular waveforms of
+   Schwartz et al. (2008) between their speed groups.
+2. **Age and speed reference values.** Peak angles and their timing are
+   predicted with the regressions of Van Hamme et al. (2015).
+3. **3D reconstruction.** The angles drive a bilateral forward-kinematic model
+   scaled to the child's height. A heel-forefoot-toe contact model places the
+   feet on the ground and yields the pelvis motion.
+4. **Three output layers.** Overground walking, the same gait on a
+   pelvis-fixed treadmill frame, and an ankle-only trajectory in the D2W robot
+   convention.
+5. **Self-reported diagnostics.** Every run writes a table of geometric quality
+   checks next to the trajectories.
+
+```mermaid
+flowchart LR
+    IN["Age, height, speed"] --> VS["Dimensionless<br/>speed v*"]
+    VS --> ANG["Joint angles<br/>Schwartz 2008"]
+    VS --> VH["Peak angles and timing<br/>Van Hamme 2015"]
+    ANG --> FK["Bilateral 3D<br/>forward kinematics"]
+    FK --> CT["Foot contact<br/>and pelvis motion"]
+    CT --> W["Overground<br/>trajectory"]
+    W --> D2W["Pelvis-fixed<br/>D2W trajectory"]
+    D2W --> CMD["Ankle command<br/>for the robot"]
 ```
 
-Generated outputs are written under `outputs/<patient_id>/` and are ignored by
-Git. The repository keeps `outputs/.gitkeep` only so that the output root exists
-after cloning.
+Speed is not a playback rate. A faster walk has different joint angles, a
+longer step and a higher cadence, and the reconstruction follows all three:
 
-## Installation
+![The same child reconstructed overground at three reference speeds](docs/media/speed_comparison_overground.gif)
 
-The code is intentionally small and uses standard scientific Python packages.
+*The same child at the Slow, Free and Fast reference speeds, played in real
+time from `world_spatial_joint_trajectories.csv`. Only the lower limbs are
+modelled.*
+
+## Quick start
 
 ```bash
+git clone https://github.com/Romerozabal/pedia-gait3d.git
+cd pedia-gait3d
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+python3 generate_integrated_normative_gait.py \
+  --config configs/subject_gait_config.comfortable_speed.example.json
 ```
 
-Current `requirements.txt`:
+Expected console output:
 
 ```text
-numpy
-pandas
-matplotlib
+patient_id=subject_comfortable
+dimensionless_speed=0.4315 -> Schwartz group: Free (inside_reported_range)
+angular_waveforms=Free_to_Fast mode=linear alpha=0.0190 (linear_interpolation_between_group_means)
+wrote tables and figures to .../outputs/subject_comfortable
 ```
 
-## Basic Use
+Then open `outputs/subject_comfortable/figures/` for the figures and the
+animation, and `outputs/subject_comfortable/tables/` for the data.
 
-Edit:
-
-```text
-configs/subject_gait_config.example.json
-```
-
-Example:
+To generate your own subject, copy the example config and edit four values:
 
 ```json
 {
-  "patient_id": "subject_001",
+  "patient_id": "subject_comfortable",
   "age_y": 9.0,
   "height_m": 1.25,
-  "speed_m_s": 0.2,
-  "leg_length_m": null,
-  "n_points": 100,
-  "schwartz_speed_interpolation": "linear",
-  "out_dir": "outputs/subject_001",
-  "contact_model": {
-    "enabled": true,
-    "pattern": "heel_strike",
-    "stance_start_percent": 0.0,
-    "toe_off_percent": 60.0,
-    "heel_to_flat_percent": 12.0,
-    "forefoot_loading_percent": 45.0,
-    "min_swing_clearance_m": 0.025
-  },
-  "export_world_spatial": true,
-  "export_d2w_centered": true
+  "speed_m_s": 1.1
 }
 ```
 
-Run:
+The same can be done without a file:
 
 ```bash
 python3 generate_integrated_normative_gait.py \
-  --config configs/subject_gait_config.example.json
+  --patient-id S01 --age-y 6 --height-m 1.15 --speed-m-s 0.9
 ```
 
-The output folder is resolved relative to the repository root. Absolute output
-paths outside the repository are rejected to keep generated files contained.
+Batch runs from a CSV, every configuration option, and examples of loading the
+tables with pandas are described in the [usage guide](docs/USAGE.md).
 
 ## Inputs
 
-The required subject parameters are:
-
-```text
-patient_id
-age_y
-height_m
-speed_m_s
-```
-
-Optional:
-
-```text
-leg_length_m
-n_points
-schwartz_speed_interpolation
-contact_model
-out_dir
-```
-
-If `leg_length_m` is not provided, the script estimates:
-
-```text
-leg_length_m = 0.530 * height_m
-```
+| Parameter | Required | Meaning |
+|-----------|----------|---------|
+| `patient_id` | yes | Label for the run and its output folder. |
+| `age_y` | yes | Age in years. Used by the Van Hamme regressions. |
+| `height_m` | yes | Height in metres. Scales the body segments. |
+| `speed_m_s` | yes | Walking speed in metres per second. |
+| `leg_length_m` | no | Measured leg length. Estimated as `0.530 * height_m` when omitted. |
+| `n_points` | no | Samples per gait cycle (default 100). |
+| `schwartz_speed_interpolation` | no | `linear` (default) or `nearest`. |
+| `contact_model` | no | Foot contact pattern and stance timing. |
+| `out_dir` | no | Output folder inside the repository (default `outputs/<patient_id>`). |
 
 Dimensionless speed is computed as:
 
@@ -129,7 +126,12 @@ v* = speed_m_s / sqrt(g * leg_length_m)
 g  = 9.81 m/s^2
 ```
 
-## Output Files
+`configs/subject_gait_config.example.json` describes a very slow,
+robot-assisted walk (0.20 m/s). It falls below the slowest reference group, so
+the Very Slow waveforms are used unchanged; the run reports this in its console
+output and in `patient_context.csv`.
+
+## Outputs
 
 Each execution writes:
 
@@ -155,487 +157,115 @@ outputs/<patient_id>/
     └── spatial_gait_3d_frontal_lateral_animation.gif
 ```
 
+| If you need | Read |
+|-------------|------|
+| What the run decided (speed group, interpolation) | `patient_context.csv` |
+| Step length, cadence, stride time | `normative_spatiotemporal_reference.csv` |
+| Joint angles over the gait cycle, with ±1 SD | `schwartz_speed_matched_angular_profiles.csv` |
+| Expected peak angles for the child's age and speed | `van_hamme_age_speed_discrete_reference.csv` |
+| 3D joint positions while walking overground | `world_spatial_joint_trajectories.csv` |
+| 3D joint positions relative to a fixed pelvis | `d2w_style_spatial_joint_trajectories.csv` |
+| Ankle trajectory for the robot workspace | `d2w_ankle_command_trajectories.csv` |
+| How consistent the reconstruction is | `spatial_reconstruction_quality.csv` |
+
 The full-body spatial tables include pelvis, hip, knee, ankle, forefoot, toe,
 and heel trajectories. The ankle-only command table is exported separately for
 D2W/robot workspace compatibility and should not be interpreted as a complete
 body skeleton.
 
-## Source Models And Local Tables
+Generated outputs are ignored by Git. The repository keeps `outputs/.gitkeep`
+only so that the output root exists after cloning. The output folder is
+resolved relative to the repository root; paths outside the repository are
+rejected to keep generated files contained.
+
+## How the speed matching works
+
+Schwartz et al. report five speed groups. For a speed that lies between two
+group means, the waveform is a linear blend of the two neighbouring curves.
+Outside the published range the nearest curve is used and nothing is
+extrapolated.
+
+![Schwartz speed groups and an interpolated waveform](docs/media/speed_interpolation.png)
+
+*Blue, light to dark: the five reference speed groups. Dashed orange: the
+waveform generated for the same 1.25 m child at 0.92 m/s.*
+
+The equations for every step, the angle sign conventions, the segment
+proportions and the contact model are in the [methods page](docs/METHODS.md).
+
+## Scope and limitations
+
+The trajectories are generated references, not measured subject kinematics.
+Before using them, note that:
+
+- The reconstruction has not been validated against measured 3D gait data. The
+  quality table reports internal geometric consistency only.
+- Age changes only the Van Hamme reference table. The waveforms and the 3D
+  trajectory depend on height, leg length and speed.
+- Step length and cadence are taken from the nearest speed group and are not
+  interpolated, unlike the angles.
+- Leg length is estimated from height unless it is provided. A measured value
+  is preferable.
+- The model is a symmetric, lower-limb, kinematic model. It does not estimate
+  contact force, pressure or centre of pressure, and it does not enforce foot
+  clearance.
+- The source cohorts are 4 to 17 years old (Schwartz et al.) and 1 to 7 years
+  old (Van Hamme et al.).
+
+The complete list, with numbers, is in
+[METHODS.md](docs/METHODS.md#scope-and-known-limitations).
+
+## Documentation
+
+| Page | Content |
+|------|---------|
+| [docs/USAGE.md](docs/USAGE.md) | Installation, the three ways to run, configuration reference, output tables and figures, coordinate frames, pandas examples, troubleshooting. |
+| [docs/METHODS.md](docs/METHODS.md) | Source models, equations, kinematic convention, reconstruction layers, quality metrics, limitations. |
+| `outputs/<patient_id>/README_OUTPUT.md` | Written by every run: the inputs and method notes for that subject. |
+
+## Repository contents
+
+```text
+.
+├── generate_integrated_normative_gait.py
+├── configs/
+│   ├── subject_gait_config.example.json
+│   └── subject_gait_config.comfortable_speed.example.json
+├── models/
+│   ├── lam_schwartz_2008_anova_reference_long.csv
+│   ├── lam_schwartz_2008_joint_rotation_reference_long.csv
+│   └── lam_van_hamme_2015_regression_coefficients.csv
+├── docs/
+│   ├── USAGE.md
+│   ├── METHODS.md
+│   ├── make_readme_media.py
+│   └── media/
+├── outputs/
+│   └── .gitkeep
+├── PACKAGE_MANIFEST.csv
+└── requirements.txt
+```
+
+`PACKAGE_MANIFEST.csv` holds SHA-256 checksums for the versioned files; the
+check is described in the [usage guide](docs/USAGE.md#verify-the-package-manifest).
+`docs/make_readme_media.py` regenerates the animations and figures of this
+documentation from the generator's own functions.
+
+## Sources
 
 The repository distributes only the local CSV model tables consumed by the
 generator. Original article PDFs and supplementary files are not included.
 Users should obtain the cited source documents from the publishers when needed.
 
-### Schwartz et al. 2008
-
-Schwartz et al. 2008 provides the speed-binned typically developing pediatric
-reference used here for:
-
-- full-cycle angular waveforms;
-- dimensionless step length;
-- dimensionless cadence;
-- dimensionless speed bins.
-
-Local model tables:
-
-```text
-models/lam_schwartz_2008_joint_rotation_reference_long.csv
-models/lam_schwartz_2008_anova_reference_long.csv
-```
-
-The angular model table was derived from the Schwartz supplementary joint
-rotation data. It includes:
-
-```text
-trunk_tilt
-trunk_obliquity
-trunk_rotation
-pelvis_tilt
-pelvis_obliquity
-pelvis_rotation
-hip_flex
-hip_adduction
-hip_rotation
-knee_flex
-knee_adduction
-knee_rotation
-ankle_dorsi
-foot_progression
-```
-
-For each profile, the table stores:
-
-```text
-schwartz_speed_group
-stat = mean, -1sd, +1sd
-cycle_percent
-value_deg
-source metadata
-```
-
-The Schwartz supplement does not provide independent ankle frontal-plane or
-ankle axial-rotation curves. This implementation therefore uses ankle
-dorsi/plantarflexion as ankle pitch and foot progression as the terminal
-foot/ankle yaw approximation.
-
-### Van Hamme et al. 2015
-
-Van Hamme et al. 2015 is used for discrete age/speed angular reference
-features in young children. The local model table stores regression
-coefficients in:
-
-```text
-models/lam_van_hamme_2015_regression_coefficients.csv
-```
-
-The implemented regression form is:
-
-```text
-Y = a * age
-  + b * v*
-  + c * age * v*
-  + d
-```
-
-where `v*` is dimensionless walking speed.
-
-These values are exported as discrete reference parameters. They do not
-currently warp or rescale the Schwartz full-cycle angular waveforms.
-
-### D2W-Compatible Transform Convention
-
-The former D2W reference snapshot is not required at runtime and is not
-distributed in this public repository. The relevant transform assumptions are
-implemented directly in `generate_integrated_normative_gait.py`: height-scaled
-segment vectors, the `R = Rz * Ry * Rx` rotation convention, pelvis-fixed
-treadmill projection, D2W Cartesian sign remapping, and the separate ankle-only
-command export.
-
-## Angular Waveform Construction
-
-The script first computes the subject dimensionless speed:
-
-```text
-v* = speed_m_s / sqrt(g * leg_length_m)
-```
-
-The Schwartz speed bins are:
-
-```text
-Very Slow: [0.090, 0.226]
-Slow:      [0.234, 0.359]
-Free:      [0.372, 0.482]
-Fast:      [0.502, 0.636]
-Very Fast: [0.638, 0.844]
-```
-
-The spatiotemporal values are selected from the closest applicable Schwartz
-speed group.
-
-For angular waveforms, `schwartz_speed_interpolation` controls whether the
-script uses a single speed group or interpolates between groups:
-
-```text
-nearest: use the closest Schwartz group waveform
-linear:  interpolate between adjacent Schwartz group mean-speed waveforms
-```
-
-The temporal interpolation to the requested gait-cycle grid is:
-
-```text
-t_i = 100 * i / N,  i = 0, 1, ..., N-1
-theta_g(t_i) = interp(theta_g_source, t_i)
-```
-
-For `linear` speed interpolation:
-
-```text
-alpha = (v* - v_low) / (v_high - v_low)
-
-theta(t_i, v*) =
-    (1 - alpha) * theta_low(t_i)
-  + alpha       * theta_high(t_i)
-```
-
-where `v_low` and `v_high` are adjacent Schwartz group mean dimensionless
-speeds. Outside the published mean-speed range, the angular waveform is clamped
-to `Very Slow` or `Very Fast`; no extrapolation is performed.
-
-The spatial reconstruction uses only the `mean` angular curves. The `-1sd` and
-`+1sd` curves are exported and plotted for reference.
-
-## Kinematic Convention
-
-The transform uses the D2W rotation order:
-
-```text
-R = Rz(yaw) * Ry(pitch) * Rx(roll)
-```
-
-The angular profile mapping used by the forward kinematic chain is:
-
-```text
-pelvis_roll  Rx = + pelvis_obliquity
-pelvis_pitch Ry = - pelvis_tilt
-pelvis_yaw   Rz = + pelvis_rotation
-
-hip_roll     Rx = - hip_adduction
-hip_pitch    Ry = + hip_flex
-hip_yaw      Rz = + hip_rotation
-
-knee_roll    Rx = - knee_adduction
-knee_pitch   Ry = - knee_flex
-knee_yaw     Rz = + knee_rotation
-
-ankle_roll   Rx = 0
-ankle_pitch  Ry = + ankle_dorsi
-ankle_yaw    Rz = + foot_progression
-```
-
-The sign conversions are explicit in `KINEMATIC_ROTATION_SIGNS` inside
-`generate_integrated_normative_gait.py`. They represent the current mapping
-between Schwartz clinical angle conventions and the D2W rotation axes used by
-this FK implementation.
-
-Trunk curves are exported in the angular table and plotted, but they are not
-used in the lower-limb spatial reconstruction.
-
-## Segment Geometry
-
-The spatial model uses height-scaled segment vectors derived from the D2W
-reference geometry:
-
-```text
-segment_vector_m = height_m * segment_proportion
-```
-
-The current proportional vectors are:
-
-```text
-leg_origin_offset = (0.0, 0.0, -0.530)
-pelvis_to_hip     = (0.0, 0.191 / 2, -0.01)
-thigh             = (0.0, 0.0, -0.246)
-shank             = (0.0, 0.0, -0.246)
-forefoot          = (-0.122 / 1.5, 0.0, -0.05)
-toe               = (-0.122, 0.0, -0.045)
-heel              = (0.03 / 1.5, 0.0, -0.05)
-```
-
-The exact scaled vectors used in a run are exported to:
-
-```text
-tables/d2w_kinematic_model_proportions.csv
-```
-
-## Spatial Reconstruction Workflow
-
-The spatial reconstruction is intentionally separated into layers:
-
-```text
-Schwartz angular waveforms
-  -> bilateral raw FK
-  -> bilateral support/contact anchoring
-  -> overground common pelvis trajectory
-  -> pelvis-fixed treadmill projection
-  -> D2W sign remapping
-  -> ankle-only command export
-```
-
-### 1. Bilateral Forward Kinematics
-
-The pelvis orientation is evaluated at the global gait-cycle phase. The right
-limb uses that phase directly:
-
-```text
-phi_R = phi
-```
-
-The left limb uses a contralateral 50% shift:
-
-```text
-phi_L = (phi + 50) mod 100
-```
-
-The left limb is mirrored in the pelvis-local mediolateral axis before applying
-the global pelvis orientation.
-
-For each side, the FK chain is:
-
-```text
-pelvis
-  -> hip
-  -> knee
-  -> ankle
-  -> forefoot, toe, heel
-```
-
-with rotations:
-
-```text
-R_pelvis = Rz(pelvis_yaw) * Ry(pelvis_pitch) * Rx(pelvis_roll)
-R_hip    = Rz(hip_yaw)    * Ry(hip_pitch)    * Rx(hip_roll)
-R_knee   = Rz(knee_yaw)   * Ry(knee_pitch)   * Rx(knee_roll)
-R_ankle  = Rz(ankle_yaw)  * Ry(ankle_pitch)  * Rx(ankle_roll)
-```
-
-### 2. Contact Weights
-
-The default contact model is phase-kinematic and uses heel, forefoot, and toe
-weights during stance:
-
-```text
-c_side(phi) =
-    w_heel(phi)     * heel_side(phi)
-  + w_forefoot(phi) * forefoot_side(phi)
-  + w_toe(phi)      * toe_side(phi)
-```
-
-For the default `heel_strike` pattern:
-
-```text
-0-12%    heel-to-flat transition
-12-45%   flat-foot support
-45-60%   forefoot/toe transition
->60%     swing
-```
-
-Other configured patterns are `midfoot_strike` and `forefoot_strike`.
-
-### 3. Bilateral Support Sharing
-
-The right and left supports are combined with phase-dependent support weights:
-
-```text
-lambda_R(phi), lambda_L(phi)
-```
-
-The default toe-off is 60%, so there is a 10% double-support interval around
-each limb transition.
-
-### 4. Overground Common Pelvis
-
-For each side, the model computes the pelvis translation candidate needed to
-place the active contact point on its ground anchor:
-
-```text
-P_R_candidate(phi) = anchor_R(phi) - c_R(phi)
-P_L_candidate(phi) = anchor_L(phi) - c_L(phi)
-```
-
-The common pelvis origin is the support-weighted bilateral solution:
-
-```text
-P_pelvis(phi) =
-    [lambda_R(phi) * P_R_candidate(phi)
-   + lambda_L(phi) * P_L_candidate(phi)]
-  / [lambda_R(phi) + lambda_L(phi)]
-```
-
-The resulting overground trajectories are exported to:
-
-```text
-tables/world_spatial_joint_trajectories.csv
-```
-
-### 5. Pelvis-Fixed Treadmill Projection
-
-The D2W geometric layer removes the overground longitudinal pelvis progression:
-
-```text
-x_treadmill_joint(phi) =
-    x_world_joint(phi) - x_world_pelvis(phi)
-
-x_treadmill_pelvis(phi) = 0
-```
-
-The vertical and mediolateral pelvis motion are retained from the overground
-solution.
-
-### 6. D2W Cartesian Remapping
-
-The Cartesian sign remapping is:
-
-```text
-x_D2W = -x_treadmill
-y_D2W = -y_treadmill
-```
-
-For the pelvis lateral coordinate, the inherited D2W scaling is kept:
-
-```text
-y_D2W_pelvis = -0.6 * y_treadmill_pelvis
-```
-
-The full-body D2W-style trajectory is exported to:
-
-```text
-tables/d2w_style_spatial_joint_trajectories.csv
-```
-
-The ankle-only centered command table is exported separately:
-
-```text
-tables/d2w_ankle_command_trajectories.csv
-```
-
-## Quality Metrics
-
-The file:
-
-```text
-tables/spatial_reconstruction_quality.csv
-```
-
-contains diagnostics for geometry, contact anchoring, and continuity. These are
-not clinical validation metrics.
-
-Key contact metrics:
-
-```text
-active_contact_anchor_error_rms_m
-active_contact_world_z_rms_m
-min_non_active_foot_z_m
-max_ground_penetration_m
-double_support_candidate_z_gap_rms_m
-boundary_transition_jump_m
-```
-
-The active contact height is computed as:
-
-```text
-z_active_contact(phi) =
-    pelvis_world_origin_z(phi) + contact_z(phi)
-```
-
-`active_contact_world_z_rms_m` is therefore the preferred ground-height
-diagnostic for the currently weighted contact point.
-
-`min_non_active_foot_z_m` reports the lowest heel, forefoot, or toe point that
-is not part of the active stance contact at that sample. This separates active
-contact anchoring from penetration caused by simplified foot geometry.
-
-`stance_foot_displacement_rms_per_sample_m` is retained as a legacy/global
-stance-foot motion diagnostic. It is not the preferred rocker-contact quality
-metric because heel, forefoot, and toe are not all expected to remain fixed
-through the whole stance phase.
-
-## Methodological Scope
-
-This repository distinguishes the model components as follows:
-
-- Schwartz et al. 2008 supplies speed-matched waveform and spatiotemporal
-  reference context.
-- Van Hamme et al. 2015 supplies discrete age/speed angular reference values.
-- The D2W transform supplies a robot-compatible geometric reconstruction
-  convention.
-- The implemented contact model is kinematic and phase-defined; it does not
-  estimate contact force, pressure, center of pressure, or unilateral dynamics.
-- The resulting trajectories are generated references, not measured subject
-  kinematics.
-
-## Batch Mode
-
-Batch generation is supported with a CSV file containing:
-
-```csv
-patient_id,age_y,height_m,speed_m_s,leg_length_m
-S01,5,1.16,1.0,
-S02,4,1.05,0.8,
-```
-
-Run:
-
-```bash
-python3 generate_integrated_normative_gait.py \
-  --examples-csv path/to/subjects.csv \
-  --out-dir outputs/batch_outputs
-```
-
-Each subject is written into its own subfolder.
-
-## Manifest Check
-
-The repository includes `PACKAGE_MANIFEST.csv` with SHA-256 checksums for
-versioned package files. To verify it:
-
-```bash
-python3 - <<'PY'
-import csv
-import hashlib
-from pathlib import Path
-
-errors = []
-root = Path(".")
-
-with open("PACKAGE_MANIFEST.csv", newline="") as f:
-    for row in csv.DictReader(f):
-        path = root / row["package_path"]
-        if not path.exists():
-            errors.append((row["package_path"], "missing"))
-            continue
-        data = path.read_bytes()
-        sha = hashlib.sha256(data).hexdigest()
-        size = str(len(data))
-        if sha != row["sha256"] or size != row["size_bytes"]:
-            errors.append((row["package_path"], sha, size))
-
-if errors:
-    print("PACKAGE_MANIFEST.csv: FAIL")
-    for item in errors:
-        print(item)
-    raise SystemExit(1)
-
-print("PACKAGE_MANIFEST.csv: OK")
-PY
-```
-
-## Minimal Validation Run
-
-```bash
-python3 -m py_compile generate_integrated_normative_gait.py
-python3 generate_integrated_normative_gait.py \
-  --config configs/subject_gait_config.example.json
-```
-
-The generated run should create CSV tables, PNG figures, and one GIF animation
-inside `outputs/<patient_id>/`.
+- Schwartz MH, Rozumalski A, Trost JP. The effect of walking speed on the gait
+  of typically developing children. *J Biomech.* 2008;41(8):1639-1650.
+  [doi:10.1016/j.jbiomech.2008.03.015](https://doi.org/10.1016/j.jbiomech.2008.03.015)
+- Van Hamme A, El Habachi A, Samson W, Dumas R, Chèze L, Dohin B. Gait
+  parameters database for young children: The influences of age and walking
+  speed. *Clin Biomech.* 2015;30(6):572-577.
+  [doi:10.1016/j.clinbiomech.2015.03.027](https://doi.org/10.1016/j.clinbiomech.2015.03.027)
+
+The D2W transform convention (height-scaled segment vectors, the
+`R = Rz * Ry * Rx` rotation order, pelvis-fixed treadmill projection and D2W
+Cartesian sign remapping) is implemented directly in
+`generate_integrated_normative_gait.py`.
